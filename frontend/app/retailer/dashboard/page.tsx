@@ -48,14 +48,14 @@ function BarChart({ data }: { data: { label: string; count: number; color: strin
     <div className="space-y-3">
       {data.map((item) => (
         <div key={item.label} className="flex items-center gap-3">
-          <div className="w-32 shrink-0 text-xs text-slate-600 font-medium">{item.label}</div>
-          <div className="flex-1 h-3 rounded-full bg-slate-100 overflow-hidden">
+          <div className="w-32 shrink-0 text-xs text-slate-400 font-medium">{item.label}</div>
+          <div className="flex-1 h-3 rounded-full bg-slate-700/50 overflow-hidden">
             <div
               className={`h-full rounded-full transition-all duration-700 ${item.color}`}
               style={{ width: `${(item.count / max) * 100}%` }}
             />
           </div>
-          <div className="w-6 text-xs font-bold text-slate-700 text-right">{item.count}</div>
+          <div className="w-6 text-xs font-bold text-slate-400 text-right">{item.count}</div>
         </div>
       ))}
     </div>
@@ -104,7 +104,7 @@ export default function RetailerDashboard() {
   return (
     <div className="min-h-screen">
       {/* Top bar */}
-      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur-md">
+      <div className="sticky top-0 z-20 border-b border-slate-700/50 bg-pale/90 backdrop-blur-md">
         <div className="px-6 py-4 flex items-center justify-between gap-4">
           <div>
             <p className="eyebrow">Retailer Portal</p>

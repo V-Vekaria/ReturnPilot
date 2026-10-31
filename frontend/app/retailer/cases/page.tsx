@@ -111,7 +111,7 @@ function CasesContent() {
   return (
     <div className="min-h-screen">
       {/* Top bar */}
-      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur-md">
+      <div className="sticky top-0 z-20 border-b border-slate-700/50 bg-pale/90 backdrop-blur-md">
         <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="eyebrow">Retailer Portal</p>
