@@ -47,5 +47,10 @@ def init_db(reset=False):
             for t in ("resolutions", "events", "cases", "orders"):
                 c.execute(f"DROP TABLE IF EXISTS {t}")
         c.executescript(SCHEMA)
+        # columns added after the first schema shipped; add them to existing databases
+        existing = {r["name"] for r in c.execute("PRAGMA table_info(cases)")}
+        for column in ("details", "customer_message"):
+            if column not in existing:
+                c.execute(f"ALTER TABLE cases ADD COLUMN {column} TEXT")
         if not c.execute("SELECT 1 FROM orders").fetchone():
             c.executemany("INSERT INTO orders VALUES(?,?,?,?,?,?)", SEED)
