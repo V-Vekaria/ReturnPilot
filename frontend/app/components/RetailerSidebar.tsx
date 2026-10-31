@@ -86,14 +86,14 @@ export default function RetailerSidebar() {
   const SidebarContent = () => (
     <>
       {/* Logo */}
-      <div className="px-4 pb-6 pt-5 border-b border-slate-200">
+      <div className="px-4 pb-6 pt-5 border-b border-slate-700/50">
         <Link href="/" className="flex items-center gap-2 text-lg font-black tracking-tight text-ink">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal text-white text-xs font-black">RP</span>
           Return<span className="text-teal">Pilot</span>
         </Link>
         <div className="mt-2 flex items-center gap-2">
           <span className="h-2 w-2 rounded-full bg-teal" />
-          <span className="text-xs font-semibold text-slate-500">Retailer Portal</span>
+          <span className="text-xs font-semibold text-slate-400">Retailer Portal</span>
         </div>
       </div>
 
@@ -113,19 +113,19 @@ export default function RetailerSidebar() {
       </nav>
 
       {/* User profile */}
-      <div className="border-t border-slate-200 p-4">
+      <div className="border-t border-slate-700/50 p-4">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-teal text-white text-sm font-bold">
             TN
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-ink truncate">TechNova Electronics</p>
-            <p className="text-xs text-slate-500 truncate">admin@technova.demo</p>
+            <p className="text-xs text-slate-400 truncate">admin@technova.demo</p>
           </div>
         </div>
         <Link
           href="/"
-          className="mt-3 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-teal hover:bg-teal/5 transition-colors"
+          className="mt-3 flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-slate-400 hover:text-teal hover:bg-teal/10 transition-colors"
         >
           <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -139,12 +139,12 @@ export default function RetailerSidebar() {
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:shrink-0 lg:border-r lg:border-slate-200 lg:bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:z-30">
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:shrink-0 lg:border-r lg:border-slate-700/50 lg:bg-pale lg:fixed lg:inset-y-0 lg:left-0 lg:z-30">
         <SidebarContent />
       </aside>
 
       {/* Mobile header */}
-      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4 lg:hidden">
+      <header className="sticky top-0 z-40 flex items-center justify-between border-b border-slate-700/50 bg-pale px-5 py-4 lg:hidden">
         <Link href="/" className="flex items-center gap-2 text-lg font-black tracking-tight text-ink">
           <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal text-white text-xs font-black">RP</span>
           Return<span className="text-teal">Pilot</span>
@@ -163,8 +163,8 @@ export default function RetailerSidebar() {
       {/* Mobile drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-ink/50" onClick={() => setMobileOpen(false)} />
-          <div className="absolute inset-y-0 left-0 w-72 flex flex-col bg-white animate-fade-in">
+          <div className="absolute inset-0 bg-deep/60" onClick={() => setMobileOpen(false)} />
+          <div className="absolute inset-y-0 left-0 w-72 flex flex-col bg-pale animate-fade-in">
             <SidebarContent />
           </div>
         </div>

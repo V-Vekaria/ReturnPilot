@@ -3,11 +3,11 @@ import CustomerNav from "./components/CustomerNav";
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-sand">
       <CustomerNav active="/" />
 
       {/* ─── Hero ────────────────────────────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-ink via-[#1a3a47] to-teal py-24 sm:py-32">
+      <section className="relative overflow-hidden bg-gradient-to-br from-deep via-[#0c0e27] to-[#1a1f4e] py-24 sm:py-32">
         {/* Decorative blobs */}
         <div className="pointer-events-none absolute -top-20 -right-20 h-96 w-96 rounded-full bg-teal/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-10 -left-10 h-72 w-72 rounded-full bg-teal/10 blur-3xl" />
@@ -66,7 +66,7 @@ export default function LandingPage() {
           <div className="text-center mb-14">
             <p className="eyebrow">How it works</p>
             <h2 className="mt-3 text-3xl font-black tracking-tight sm:text-4xl">Three steps to resolution</h2>
-            <p className="mt-4 text-slate-600 max-w-xl mx-auto">Submit your complaint, track progress in real time, and get a fair resolution — all in one place.</p>
+            <p className="mt-4 text-slate-400 max-w-xl mx-auto">Submit your complaint, track progress in real time, and get a fair resolution — all in one place.</p>
           </div>
           <div className="grid gap-8 md:grid-cols-3">
             {[
@@ -110,7 +110,7 @@ export default function LandingPage() {
                   {item.step}
                 </div>
                 <h3 className="text-lg font-bold mb-2">{item.title}</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">{item.desc}</p>
+                <p className="text-slate-400 text-sm leading-relaxed">{item.desc}</p>
               </div>
             ))}
           </div>
@@ -118,7 +118,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Feature cards ────────────────────────────────────────────────── */}
-      <section className="py-20 bg-white" id="features">
+      <section className="py-20 bg-pale" id="features">
         <div className="shell">
           <div className="text-center mb-14">
             <p className="eyebrow">Why ReturnPilot</p>
@@ -160,7 +160,7 @@ export default function LandingPage() {
               <div key={i} className="card-hover">
                 <div className="mb-4 text-3xl">{feature.icon}</div>
                 <h3 className="font-bold text-ink mb-2">{feature.title}</h3>
-                <p className="text-sm text-slate-600 leading-relaxed">{feature.desc}</p>
+                <p className="text-sm text-slate-400 leading-relaxed">{feature.desc}</p>
               </div>
             ))}
           </div>
@@ -226,7 +226,7 @@ export default function LandingPage() {
       </section>
 
       {/* ─── Footer ───────────────────────────────────────────────────────── */}
-      <footer className="border-t border-slate-200 bg-white">
+      <footer className="border-t border-slate-700/50 bg-pale">
         <div className="shell py-12">
           <div className="grid gap-10 md:grid-cols-4">
             <div className="md:col-span-2">
@@ -234,7 +234,7 @@ export default function LandingPage() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal text-white text-sm font-black">RP</span>
                 Return<span className="text-teal">Pilot</span>
               </div>
-              <p className="mt-3 max-w-xs text-sm text-slate-500 leading-relaxed">
+              <p className="mt-3 max-w-xs text-sm text-slate-400 leading-relaxed">
                 Professional complaint and returns management connecting customers with retailers for fair, transparent resolutions.
               </p>
               <p className="mt-4 text-xs text-slate-400">Fictional demo only. No real payments processed.</p>
@@ -274,7 +274,7 @@ export default function LandingPage() {
               </ul>
             </div>
           </div>
-          <div className="mt-10 border-t border-slate-100 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-400">
+          <div className="mt-10 border-t border-slate-700/30 pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
             <span>© {new Date().getFullYear()} ReturnPilot. Demo prototype only.</span>
             <span>Fictional orders · Simulated decisions · No real payments</span>
           </div>
@@ -300,7 +300,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
         </svg>
       </summary>
-      <p className="mt-4 text-sm text-slate-600 leading-relaxed">{answer}</p>
+      <p className="mt-4 text-sm text-slate-400 leading-relaxed">{answer}</p>
     </details>
   );
 }

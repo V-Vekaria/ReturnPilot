@@ -20,7 +20,7 @@ const customerNav: NavItem[] = [
 export default function CustomerNav({ active }: { active?: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur-md">
+    <header className="sticky top-0 z-40 border-b border-slate-700/50 bg-pale/90 backdrop-blur-md">
       <div className="shell flex items-center justify-between gap-4 py-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 text-xl font-black tracking-tight text-ink">
@@ -36,8 +36,8 @@ export default function CustomerNav({ active }: { active?: string }) {
               href={item.href}
               className={`rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 active === item.href
-                  ? "bg-pale text-teal"
-                  : "text-slate-600 hover:bg-slate-100 hover:text-ink"
+                  ? "bg-teal/15 text-teal"
+                  : "text-slate-400 hover:bg-slate-800/40 hover:text-ink"
               }`}
             >
               {item.label}
@@ -69,13 +69,13 @@ export default function CustomerNav({ active }: { active?: string }) {
 
       {/* Mobile menu */}
       {open && (
-        <div className="border-t border-slate-100 bg-white px-5 pb-4 md:hidden animate-fade-in">
+        <div className="border-t border-slate-700/40 bg-pale px-5 pb-4 md:hidden animate-fade-in">
           {customerNav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setOpen(false)}
-              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+              className="block rounded-lg px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800/40"
             >
               {item.label}
             </Link>

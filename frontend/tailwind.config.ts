@@ -4,12 +4,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        ink: "#172B35",
-        teal: "#146C72",
-        pale: "#ECF7F5",
-        sand: "#F7F5EF",
-        "teal-dark": "#0e5459",
-        "teal-light": "#1a8a92",
+        ink: "#E2E8F0",
+        teal: "#6366F1",
+        pale: "#111827",
+        sand: "#0D0F1E",
+        deep: "#070910",
+        "teal-dark": "#4F46E5",
+        "teal-light": "#818CF8",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "sans-serif"],
