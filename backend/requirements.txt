@@ -1,7 +1,0 @@
-fastapi>=0.115,<1
-uvicorn[standard]>=0.34,<1
-pydantic>=2.10,<3
-google-adk>=1.17,<3
-python-dotenv>=1,<2
-pytest>=8,<10
-httpx>=0.28,<1
