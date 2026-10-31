@@ -12,6 +12,8 @@ const customerNav: NavItem[] = [
   { label: "Home", href: "/" },
   { label: "Report an Issue", href: "/report-issue" },
   { label: "Track Complaint", href: "/track-case" },
+  { label: "Returns Policy", href: "/policy" },
+  { label: "Help", href: "/help" },
   { label: "Retailer Portal", href: "/retailer/dashboard" },
 ];
 

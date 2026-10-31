@@ -7,34 +7,28 @@ import { StatusBadge, PriorityBadge } from "../../../../components/Badges";
 import Modal from "../../../../components/Modal";
 import { useToast } from "../../../../components/Toast";
 import {
-  getComplaint,
-  upsertComplaint,
   Complaint,
-  Decision,
   formatIssueType,
   formatResolution,
   formatDateTime,
   formatDate,
-  TEAM_MEMBERS,
 } from "../../../../lib/mockData";
+import { ApiError, decideCase, formatPence, getStaffCase } from "../../../../lib/api";
 
-type DecisionType = Decision["type"];
+type DecisionType = "approve_refund" | "reject" | "escalate";
 
 const DECISION_OPTIONS: { type: DecisionType; label: string; icon: string; color: string }[] = [
-  { type: "approve_refund", label: "Approve Refund", icon: "💰", color: "bg-green-50 border-green-300 hover:bg-green-100 text-green-900" },
-  { type: "approve_replacement", label: "Approve Replacement", icon: "📦", color: "bg-blue-50 border-blue-300 hover:bg-blue-100 text-blue-900" },
-  { type: "approve_repair", label: "Approve Repair", icon: "🔧", color: "bg-yellow-50 border-yellow-300 hover:bg-yellow-100 text-yellow-900" },
+  { type: "approve_refund", label: "Approve simulated refund", icon: "💰", color: "bg-green-50 border-green-300 hover:bg-green-100 text-green-900" },
   { type: "reject", label: "Reject Complaint", icon: "✕", color: "bg-red-50 border-red-300 hover:bg-red-100 text-red-900" },
-  { type: "request_info", label: "Request More Info", icon: "❓", color: "bg-orange-50 border-orange-300 hover:bg-orange-100 text-orange-900" },
   { type: "escalate", label: "Escalate Case", icon: "⬆️", color: "bg-purple-50 border-purple-300 hover:bg-purple-100 text-purple-900" },
 ];
+const TO_BACKEND = { approve_refund: "approve", reject: "reject", escalate: "escalate" } as const;
 
 const ESCALATION_REASONS = [
   "High-value dispute requiring senior review",
   "Legal or regulatory implications",
   "Repeated complaint from same customer",
   "Courier investigation required",
-  "Fraud suspected",
   "Customer threatening legal action",
   "Policy ambiguity",
 ];
@@ -57,7 +51,8 @@ export default function DecisionPage() {
   const [reason, setReason] = useState("");
   const [internalNote, setInternalNote] = useState("");
   const [customerExplanation, setCustomerExplanation] = useState("");
-  const [refundAmount, setRefundAmount] = useState("");
+  const [evidenceConfirmed, setEvidenceConfirmed] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [escalationReason, setEscalationReason] = useState("");
   const [escalationTeam, setEscalationTeam] = useState("");
   const [escalationNote, setEscalationNote] = useState("");
@@ -65,16 +60,22 @@ export default function DecisionPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    const c = getComplaint(id);
-    if (c) setComplaint(c);
-  }, [id]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    try { setComplaint(await getStaffCase(id)); } catch { setComplaint(null); } finally { setLoading(false); }
+  }
+
+  useEffect(() => { load(); }, [id]);
 
   function validate(): boolean {
     const errs: Record<string, string> = {};
     if (!selectedType) { errs.type = "Please select a decision type."; }
-    if (!reason.trim()) errs.reason = "A reason for this decision is required.";
+    if (reason.trim().length < 10) errs.reason = "Give a reason of at least 10 characters.";
+    else if (reason.trim().length > 350) errs.reason = "Keep the reason under 350 characters.";
     if (!customerExplanation.trim()) errs.customerExplanation = "A customer-facing explanation is required.";
+    if (selectedType === "approve_refund" && complaint?.issueType === "damaged_product" && !evidenceConfirmed)
+      errs.evidence = "Confirm you have reviewed the damage evidence before approving.";
     if (selectedType === "escalate") {
       if (!escalationReason) errs.escalationReason = "Please select an escalation reason.";
       if (!escalationTeam) errs.escalationTeam = "Please select a destination team.";
@@ -88,68 +89,39 @@ export default function DecisionPage() {
   }
 
   async function confirmDecision() {
-    if (!complaint || !selectedType) return;
+    if (!complaint || !selectedType || submitting) return;
     setSubmitting(true);
-
-    await new Promise((r) => setTimeout(r, 800));
-
-    const now = new Date().toISOString();
-    const newStatus =
-      selectedType === "escalate" ? "escalated" :
-      selectedType === "reject" || selectedType === "request_info" ? "rejected" :
-      selectedType === "approve_refund" || selectedType === "approve_replacement" || selectedType === "approve_repair" ? "resolved" :
-      "pending_approval";
-
-    const decisionLabel = DECISION_OPTIONS.find((d) => d.type === selectedType)?.label ?? selectedType;
-
-    const decision: Decision = {
-      type: selectedType,
-      reason: reason.trim(),
-      internalNote: internalNote.trim() || undefined,
-      customerExplanation: customerExplanation.trim(),
-      refundAmount: refundAmount ? parseFloat(refundAmount) : undefined,
-      escalationReason: escalationReason || undefined,
-      escalationTeam: escalationTeam || undefined,
-      escalationNote: escalationNote.trim() || undefined,
-      decidedBy: "You (Retailer)",
-      decidedAt: now,
-    };
-
-    const updated: Complaint = {
-      ...complaint,
-      status: newStatus,
-      decision,
-      retailerResponse: customerExplanation.trim(),
-      updatedAt: now,
-      timeline: [
-        ...complaint.timeline,
-        {
-          id: `t-${Date.now()}`,
-          timestamp: now,
-          actor: "You (Retailer)",
-          actorRole: "retailer",
-          event: `Decision: ${decisionLabel}`,
-          note: reason.trim(),
-        },
-        {
-          id: `t-sys-${Date.now()}`,
-          timestamp: now,
-          actor: "System",
-          actorRole: "system",
-          event: `Status changed to ${newStatus.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}`,
-        },
-      ],
-    };
-
-    upsertComplaint(updated);
-    setComplaint(updated);
-    setConfirmOpen(false);
-    setSubmitting(false);
-    showToast(`Decision recorded: ${decisionLabel}`, "success");
-
-    // Navigate back to case detail after short delay
-    setTimeout(() => router.push(`/retailer/cases/${id}`), 1500);
+    setSubmitError("");
+    const parts = [reason.trim()];
+    if (selectedType === "escalate") parts.push(`Escalated to ${escalationTeam}: ${escalationReason}.`);
+    if (internalNote.trim()) parts.push(`Note: ${internalNote.trim()}`);
+    if (escalationNote.trim()) parts.push(`Escalation note: ${escalationNote.trim()}`);
+    try {
+      const updated = await decideCase(complaint.id, {
+        decision: TO_BACKEND[selectedType],
+        note: parts.join(" ").slice(0, 500),
+        customer_message: customerExplanation.trim(),
+        evidence_confirmed: selectedType === "approve_refund" ? evidenceConfirmed : false,
+      });
+      setComplaint(updated);
+      setConfirmOpen(false);
+      // Report what the backend recorded, not an optimistic message
+      showToast(updated.resolutionRef
+        ? `Approved. Simulated refund ${formatPence(updated.resolutionAmountPence)} recorded (${updated.resolutionRef}).`
+        : `Decision recorded: case is now ${updated.status.replace("_", " ")}.`, "success");
+      setTimeout(() => router.push(`/retailer/cases/${id}`), 1500);
+    } catch (err) {
+      setConfirmOpen(false);
+      setSubmitError(err instanceof ApiError && err.status === 409
+        ? `${err.message}. The case has been refreshed; review it before deciding again.`
+        : (err as Error).message);
+      if (err instanceof ApiError && err.status === 409) { setSelectedType(null); await load(); }
+    } finally {
+      setSubmitting(false);
+    }
   }
+
+  if (loading) return <div className="p-10 text-center text-slate-400">Loading case…</div>;
 
   if (!complaint) {
     return (
@@ -162,6 +134,9 @@ export default function DecisionPage() {
 
   const isEscalation = selectedType === "escalate";
   const isRefund = selectedType === "approve_refund";
+  const canDecide = complaint.status === "pending_approval";
+  const refundAvailable = complaint.recommendation === "refund" && !!complaint.proposedAmountPence;
+  const needsEvidenceConfirmation = complaint.issueType === "damaged_product";
   const decisionLabel = DECISION_OPTIONS.find((d) => d.type === selectedType)?.label ?? "";
 
   return (
@@ -184,15 +159,25 @@ export default function DecisionPage() {
               <span className="text-slate-500">Customer</span>
               <span className="font-medium">{complaint.customerName}</span>
             </div>
-            {isRefund && refundAmount && (
+            <div className="flex justify-between">
+              <span className="text-slate-500">Order</span>
+              <span className="font-mono font-bold">{complaint.orderNumber}</span>
+            </div>
+            {isRefund && (
               <div className="flex justify-between">
-                <span className="text-slate-500">Refund amount</span>
-                <span className="font-bold text-green-700">£{parseFloat(refundAmount).toFixed(2)}</span>
+                <span className="text-slate-500">Refund amount (stored proposal)</span>
+                <span className="font-bold text-green-700">{formatPence(complaint.proposedAmountPence)} GBP</span>
+              </div>
+            )}
+            {isRefund && needsEvidenceConfirmation && (
+              <div className="flex justify-between">
+                <span className="text-slate-500">Evidence confirmed</span>
+                <span className="font-medium">{evidenceConfirmed ? "Yes" : "No"}</span>
               </div>
             )}
           </div>
           <p className="text-sm text-slate-600">
-            This action will update the complaint status and notify the customer. No real payments will be processed.
+            This updates the case and the customer&apos;s tracking page. Approval runs a simulated refund only: no real payment is processed.
           </p>
           <div className="flex gap-3 pt-2">
             <button onClick={confirmDecision} disabled={submitting} className="button flex-1">
@@ -228,14 +213,18 @@ export default function DecisionPage() {
         </div>
       </div>
 
-      {/* Already decided banner */}
-      {complaint.decision && (
+      {submitError && <div className="mx-6 mt-6 alert-error" role="alert">{submitError}</div>}
+
+      {/* Decision not available banner */}
+      {!canDecide && (
         <div className="mx-6 mt-6 alert-warning flex items-center gap-3">
           <svg className="h-5 w-5 shrink-0 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <span>
-            A decision has already been recorded for this case ({complaint.decision.decidedBy}, {formatDateTime(complaint.decision.decidedAt)}). You can record an updated decision below.
+            {complaint.decision
+              ? `A decision has already been recorded (${formatDateTime(complaint.decision.decidedAt)}). Decisions cannot be repeated.`
+              : "This case is not awaiting review yet. Run the investigation from the case page first."}
           </span>
         </div>
       )}
@@ -244,7 +233,7 @@ export default function DecisionPage() {
         {/* ── Left: decision form ──────────────────────────────────────── */}
         <div className="xl:col-span-2 space-y-6">
           {/* Decision type selector */}
-          <div className="card">
+          {canDecide && <div className="card">
             <h2 className="section-title mb-4">Select a decision</h2>
             {errors.type && <p className="error-msg mb-3">{errors.type}</p>}
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -252,8 +241,10 @@ export default function DecisionPage() {
                 <button
                   key={option.type}
                   type="button"
-                  onClick={() => { setSelectedType(option.type); setErrors({}); }}
-                  className={`flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-all duration-150 ${
+                  disabled={option.type === "approve_refund" && !refundAvailable}
+                  title={option.type === "approve_refund" && !refundAvailable ? "The proposal does not recommend a refund. Escalate or reject instead." : undefined}
+                  onClick={() => { setSelectedType(option.type); setErrors({}); setSubmitError(""); }}
+                  className={`flex items-center gap-3 rounded-xl border-2 px-4 py-4 text-left transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed ${
                     selectedType === option.type
                       ? option.color + " ring-2 ring-offset-1 ring-teal/40"
                       : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
@@ -264,10 +255,13 @@ export default function DecisionPage() {
                 </button>
               ))}
             </div>
-          </div>
+            {!refundAvailable && (
+              <p className="mt-3 text-xs text-slate-500">Refund approval is unavailable: the proposal recommends investigation, not a refund.</p>
+            )}
+          </div>}
 
           {/* Decision form */}
-          {selectedType && (
+          {canDecide && selectedType && (
             <div className="card space-y-5 animate-fade-in">
               <h2 className="section-title">Decision details</h2>
 
@@ -296,14 +290,20 @@ export default function DecisionPage() {
               </div>
 
               {isRefund && (
-                <div className="input-group">
-                  <label className="label" htmlFor="refundAmount">Refund amount (£) — simulated only</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-500">£</span>
-                    <input id="refundAmount" type="number" min="0" step="0.01" className="input pl-7"
-                      placeholder="0.00" value={refundAmount} onChange={(e) => setRefundAmount(e.target.value)} />
-                  </div>
-                  <p className="text-xs text-slate-400 mt-1">This is a simulated refund. No real payment will be processed.</p>
+                <div className="rounded-xl bg-green-50 border border-green-200 p-4 space-y-3">
+                  <p className="text-sm">
+                    Simulated refund of <strong>{formatPence(complaint.proposedAmountPence)}</strong>, taken from the stored proposal (not editable). No real payment will be processed.
+                  </p>
+                  {needsEvidenceConfirmation && (
+                    <label className="flex items-start gap-3 cursor-pointer">
+                      <input type="checkbox" checked={evidenceConfirmed} onChange={(e) => setEvidenceConfirmed(e.target.checked)}
+                        className="mt-0.5 h-5 w-5 rounded border-slate-300 accent-teal" />
+                      <span className="text-sm text-slate-700">
+                        I have reviewed the customer&apos;s damage evidence and confirm the defect. The evidence is customer-supplied and has not been verified automatically.
+                      </span>
+                    </label>
+                  )}
+                  {errors.evidence && <p className="error-msg">{errors.evidence}</p>}
                 </div>
               )}
 
@@ -374,6 +374,7 @@ export default function DecisionPage() {
             <div className="card border-teal/20 bg-teal/5">
               <h2 className="section-title mb-3">Investigation findings</h2>
               <p className="text-sm text-slate-700 leading-relaxed">{complaint.investigationNotes}</p>
+              {complaint.policyReason && <p className="mt-3 text-xs text-slate-600"><strong>Policy:</strong> {complaint.policyReason}</p>}
             </div>
           )}
 

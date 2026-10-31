@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import CustomerNav from "../components/CustomerNav";
-import { getComplaint, formatDate, formatIssueType, formatResolution, Complaint } from "../lib/mockData";
+import { formatDate, formatIssueType, formatResolution, Complaint } from "../lib/mockData";
+import { getCustomerCase } from "../lib/api";
 
 export default function ComplaintSubmittedPage() {
   const [complaint, setComplaint] = useState<Complaint | null>(null);
@@ -11,10 +12,8 @@ export default function ComplaintSubmittedPage() {
 
   useEffect(() => {
     const id = localStorage.getItem("rp_last_complaint_id");
-    if (id) {
-      const c = getComplaint(id);
-      if (c) setComplaint(c);
-    }
+    const email = localStorage.getItem("rp_last_complaint_email") ?? "";
+    if (id) getCustomerCase(id, email).then(setComplaint).catch(() => setComplaint(null));
   }, []);
 
   function copyRef() {

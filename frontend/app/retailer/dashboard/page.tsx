@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { StatusBadge, PriorityBadge } from "../../components/Badges";
+import { listCases } from "../../lib/api";
 import {
-  loadComplaints,
   Complaint,
   computeStats,
   DashboardStats,
@@ -70,10 +70,17 @@ export default function RetailerDashboard() {
   });
   const [dateRange, setDateRange] = useState("7d");
 
-  function refresh() {
-    const all = loadComplaints();
-    setComplaints(all);
-    setStats(computeStats(all));
+  const [loadError, setLoadError] = useState("");
+
+  async function refresh() {
+    try {
+      const all = await listCases();
+      setComplaints(all);
+      setStats(computeStats(all));
+      setLoadError("");
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not load cases.");
+    }
   }
 
   useEffect(() => { refresh(); }, []);
@@ -81,7 +88,6 @@ export default function RetailerDashboard() {
   // Status distribution
   const statusDist: { label: string; count: number; color: string; key: ComplaintStatus }[] = [
     { key: "submitted", label: "Submitted", count: complaints.filter((c) => c.status === "submitted").length, color: "bg-blue-400" },
-    { key: "under_review", label: "Under Review", count: complaints.filter((c) => c.status === "under_review").length, color: "bg-yellow-400" },
     { key: "investigating", label: "Investigating", count: complaints.filter((c) => c.status === "investigating").length, color: "bg-orange-400" },
     { key: "pending_approval", label: "Pending Approval", count: complaints.filter((c) => c.status === "pending_approval").length, color: "bg-purple-400" },
     { key: "resolved", label: "Resolved", count: complaints.filter((c) => c.status === "resolved").length, color: "bg-teal" },
@@ -145,6 +151,7 @@ export default function RetailerDashboard() {
       </div>
 
       <div className="p-6 space-y-6">
+        {loadError && <div className="alert-error" role="alert">{loadError}</div>}
         {/* ── KPI cards ─────────────────────────────────────────────────── */}
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <KpiCard
