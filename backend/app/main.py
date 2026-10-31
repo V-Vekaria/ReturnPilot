@@ -1,10 +1,18 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app import config, db
 from backend.app.api import cases, investigate
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+	db.init_db()
+	yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=config.ALLOWED_ORIGINS,
@@ -12,13 +20,6 @@ app.add_middleware(
 	allow_methods=["*"],
 	allow_headers=["*"],
 )
-
-
-@app.on_event("startup")
-def initialize_database():
-	db.init_db()
-
-
 @app.get("/health")
 def health():
 	return {"status": "ok", "mode": config.INVESTIGATION_MODE}
