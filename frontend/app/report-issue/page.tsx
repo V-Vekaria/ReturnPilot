@@ -3,13 +3,8 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import CustomerNav from "../components/CustomerNav";
-import {
-  generateComplaintId,
-  upsertComplaint,
-  IssueType,
-  Resolution,
-  Complaint,
-} from "../lib/mockData";
+import { IssueType, Resolution } from "../lib/mockData";
+import { ApiError, createCase, SUPPORTED_ISSUES } from "../lib/api";
 
 // ─── Step types ───────────────────────────────────────────────────────────────
 interface Step1 {
@@ -37,14 +32,11 @@ interface Step4 {
 
 const STEPS = ["Your Details", "Purchase Info", "Complaint", "Evidence", "Review"];
 const CATEGORIES = ["Electronics", "Clothing", "Footwear", "Home Appliances", "Kitchen Appliances", "Beauty", "Furniture", "Sports & Outdoors", "Toys", "Food & Drink", "Other"];
-const ISSUE_TYPES: { value: IssueType; label: string }[] = [
-  { value: "damaged_product", label: "Damaged product" },
-  { value: "defective_product", label: "Defective product" },
-  { value: "wrong_item", label: "Wrong item received" },
-  { value: "missing_delivery", label: "Missing delivery" },
-  { value: "refund_issue", label: "Refund issue" },
-  { value: "return_request", label: "Return request" },
-  { value: "other", label: "Other" },
+const ISSUE_TYPES = SUPPORTED_ISSUES;
+const DEMO_ORDERS = [
+  { id: "NT-1042", hint: "£149 headphones, delivered 29 Oct (try: damaged item)" },
+  { id: "NT-1050", hint: "£250 parcel, scan says delivered 28 Oct (try: missing delivery)" },
+  { id: "NT-1060", hint: "£65 jacket, delivered 26 Oct (try: change of mind)" },
 ];
 const RESOLUTIONS: { value: Resolution; label: string }[] = [
   { value: "refund", label: "Refund" },
@@ -65,6 +57,7 @@ function validateStep2(s: Step2) {
   const errs: Record<string, string> = {};
   if (!s.retailerName.trim()) errs.retailerName = "Retailer name is required.";
   if (!s.orderNumber.trim()) errs.orderNumber = "Order number is required.";
+  else if (s.orderNumber.trim().length < 3 || s.orderNumber.trim().length > 40) errs.orderNumber = "Order number must be 3-40 characters.";
   if (!s.purchaseDate) errs.purchaseDate = "Purchase date is required.";
   if (!s.productName.trim()) errs.productName = "Product name is required.";
   if (!s.productCategory) errs.productCategory = "Product category is required.";
@@ -75,6 +68,7 @@ function validateStep3(s: Step3) {
   if (!s.complaintTitle.trim()) errs.complaintTitle = "Complaint title is required.";
   if (!s.description.trim() || s.description.trim().length < 20)
     errs.description = "Please provide at least 20 characters describing the issue.";
+  else if (s.description.trim().length > 2000) errs.description = "Description must be 2000 characters or fewer.";
   if (!s.issueDate) errs.issueDate = "Date the issue occurred is required.";
   return errs;
 }
@@ -149,6 +143,7 @@ export default function ReportIssuePage() {
   const [step4, setStep4] = useState<Step4>({ files: [] });
   const [confirmed, setConfirmed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -175,52 +170,49 @@ export default function ReportIssuePage() {
   async function handleSubmit() {
     if (!confirmed) { setErrors({ confirm: "Please confirm the information is accurate." }); return; }
     setSubmitting(true);
-    // Simulate async delay
-    await new Promise((r) => setTimeout(r, 1200));
-    const id = generateComplaintId();
-    const now = new Date().toISOString();
-    const complaint: Complaint = {
-      id,
-      customerName: step1.fullName,
-      customerEmail: step1.email,
-      customerPhone: step1.phone || undefined,
-      retailerName: step2.retailerName,
-      orderNumber: step2.orderNumber,
-      purchaseDate: step2.purchaseDate,
-      productName: step2.productName,
-      productCategory: step2.productCategory,
-      issueType: step3.issueType,
-      complaintTitle: step3.complaintTitle,
-      description: step3.description,
-      issueDate: step3.issueDate,
-      preferredResolution: step3.preferredResolution,
-      status: "submitted",
-      priority: "medium",
-      submittedAt: now,
-      updatedAt: now,
-      internalComments: [],
-      timeline: [
-        {
-          id: "t-init",
-          timestamp: now,
-          actor: step1.fullName,
-          actorRole: "customer",
-          event: "Complaint submitted",
+    setSubmitError("");
+    const issue = SUPPORTED_ISSUES.find((t) => t.value === step3.issueType) ?? SUPPORTED_ISSUES[0];
+    try {
+      const created = await createCase({
+        order_id: step2.orderNumber.trim(),
+        issue_type: issue.backend,
+        description: step3.description.trim(),
+        details: {
+          retailer_name: step2.retailerName.trim(),
+          customer_name: step1.fullName.trim(),
+          customer_email: step1.email.trim().toLowerCase(),
+          customer_phone: step1.phone.trim() || undefined,
+          title: step3.complaintTitle.trim(),
+          product_name: step2.productName.trim(),
+          product_category: step2.productCategory,
+          purchase_date: step2.purchaseDate,
+          issue_date: step3.issueDate,
+          requested_resolution: step3.preferredResolution,
+          // File names only: uploads are not stored in this demo
+          evidence_files: step4.files,
         },
-        {
-          id: "t-sys",
-          timestamp: now,
-          actor: "System",
-          actorRole: "system",
-          event: "Case created and queued for review",
-        },
-      ],
-      evidenceFiles: step4.files,
-    };
-    upsertComplaint(complaint);
-    // Store last submitted ID for confirmation page
-    localStorage.setItem("rp_last_complaint_id", id);
-    router.push("/complaint-submitted");
+      });
+      localStorage.setItem("rp_last_complaint_id", created.id);
+      localStorage.setItem("rp_last_complaint_email", step1.email.trim().toLowerCase());
+      router.push("/complaint-submitted");
+    } catch (err) {
+      const e = err instanceof ApiError ? err : new ApiError(0, "Something went wrong. Please try again.");
+      if (e.status === 404) {
+        // Unknown order: send the user back to the purchase step with the error beside the field
+        setErrors({ orderNumber: e.message });
+        setStep(1);
+      } else {
+        const fieldMap: Record<string, string> = { order_id: "orderNumber", description: "description" };
+        const mapped: Record<string, string> = {};
+        for (const [k, v] of Object.entries(e.fieldErrors)) mapped[fieldMap[k] ?? k] = v;
+        if (mapped.orderNumber) setStep(1);
+        else if (mapped.description) setStep(2);
+        setErrors(mapped);
+        setSubmitError(e.message);
+      }
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   const summaryLabel = (label: string, value: string) => (
@@ -230,10 +222,7 @@ export default function ReportIssuePage() {
     </div>
   );
 
-  const issueLabelMap: Record<IssueType, string> = {
-    damaged_product: "Damaged product", defective_product: "Defective product", wrong_item: "Wrong item received",
-    missing_delivery: "Missing delivery", refund_issue: "Refund issue", return_request: "Return request", other: "Other",
-  };
+  const issueLabelMap = Object.fromEntries(SUPPORTED_ISSUES.map((t) => [t.value, t.label])) as Record<IssueType, string>;
   const resolutionLabelMap: Record<Resolution, string> = {
     refund: "Refund", replacement: "Replacement", repair: "Repair", other: "Other",
   };
@@ -288,7 +277,16 @@ export default function ReportIssuePage() {
                 </Field>
                 <Field label="Order number" id="orderNumber" error={errors.orderNumber} required>
                   <input id="orderNumber" className={`input ${errors.orderNumber ? "input-error" : ""}`} value={step2.orderNumber}
-                    onChange={(e) => setStep2((p) => ({ ...p, orderNumber: e.target.value }))} placeholder="e.g. TNE-88421" />
+                    onChange={(e) => setStep2((p) => ({ ...p, orderNumber: e.target.value }))} placeholder="e.g. NT-1042" />
+                  <div className="mt-2 rounded-xl bg-blue-50 border border-blue-200 px-3 py-2">
+                    <p className="text-xs font-semibold text-blue-800">Demo orders (fictional)</p>
+                    {DEMO_ORDERS.map((o) => (
+                      <button key={o.id} type="button" className="block text-left text-xs text-blue-700 hover:underline"
+                        onClick={() => setStep2((p) => ({ ...p, orderNumber: o.id }))}>
+                        <strong>{o.id}</strong>: {o.hint}
+                      </button>
+                    ))}
+                  </div>
                 </Field>
                 <Field label="Purchase date" id="purchaseDate" error={errors.purchaseDate} required>
                   <input id="purchaseDate" type="date" className={`input ${errors.purchaseDate ? "input-error" : ""}`} value={step2.purchaseDate}
@@ -384,7 +382,7 @@ export default function ReportIssuePage() {
                     className="button button-sm mt-3">
                     Browse files
                   </button>
-                  <p className="text-xs text-slate-400 mt-3">JPG, PNG, PDF, DOC up to 10MB each</p>
+                  <p className="text-xs text-slate-400 mt-3">Demo: only file names are recorded. Files are not uploaded or verified.</p>
                 </div>
 
                 {/* File previews */}
@@ -462,6 +460,7 @@ export default function ReportIssuePage() {
                   </span>
                 </label>
                 {errors.confirm && <p className="error-msg">{errors.confirm}</p>}
+                {submitError && <div className="alert-error" role="alert">{submitError}</div>}
               </div>
             )}
 

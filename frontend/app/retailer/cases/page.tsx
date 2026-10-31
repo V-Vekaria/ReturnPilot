@@ -4,8 +4,8 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { StatusBadge, PriorityBadge } from "../../components/Badges";
+import { formatPence, listCases } from "../../lib/api";
 import {
-  loadComplaints,
   Complaint,
   ComplaintStatus,
   Priority,
@@ -18,7 +18,6 @@ import {
 const STATUS_OPTIONS: { value: ComplaintStatus | "all"; label: string }[] = [
   { value: "all", label: "All statuses" },
   { value: "submitted", label: "Submitted" },
-  { value: "under_review", label: "Under Review" },
   { value: "investigating", label: "Investigating" },
   { value: "pending_approval", label: "Pending Approval" },
   { value: "resolved", label: "Resolved" },
@@ -36,13 +35,9 @@ const PRIORITY_OPTIONS: { value: Priority | "all"; label: string }[] = [
 
 const ISSUE_OPTIONS: { value: IssueType | "all"; label: string }[] = [
   { value: "all", label: "All categories" },
-  { value: "damaged_product", label: "Damaged Product" },
-  { value: "defective_product", label: "Defective Product" },
-  { value: "wrong_item", label: "Wrong Item" },
-  { value: "missing_delivery", label: "Missing Delivery" },
-  { value: "refund_issue", label: "Refund Issue" },
-  { value: "return_request", label: "Return Request" },
-  { value: "other", label: "Other" },
+  { value: "damaged_product", label: "Damaged Item" },
+  { value: "missing_delivery", label: "Missing / Disputed Delivery" },
+  { value: "return_request", label: "Change of Mind" },
 ];
 
 const PAGE_SIZE = 10;
@@ -60,8 +55,19 @@ function CasesContent() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(1);
 
-  function refresh() {
-    setComplaints(loadComplaints());
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    setLoading(true);
+    try {
+      setComplaints(await listCases());
+      setLoadError("");
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Could not load cases.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { refresh(); }, []);
@@ -197,7 +203,7 @@ function CasesContent() {
                 <th>Submitted</th>
                 <th>Priority</th>
                 <th>Status</th>
-                <th>Assigned to</th>
+                <th>Proposed</th>
                 <th></th>
               </tr>
             </thead>
@@ -205,7 +211,7 @@ function CasesContent() {
               {paginated.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="py-16 text-center text-slate-400">
-                    No complaints match the current filters.
+                    {loading ? "Loading cases…" : loadError ? loadError : "No complaints match the current filters."}
                   </td>
                 </tr>
               ) : paginated.map((c) => (
@@ -227,17 +233,9 @@ function CasesContent() {
                   <td className="text-xs text-slate-500">{formatDate(c.submittedAt)}</td>
                   <td><PriorityBadge priority={c.priority} /></td>
                   <td><StatusBadge status={c.status} /></td>
-                  <td>
-                    {c.assignedTo ? (
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-teal/10 text-teal text-[10px] font-bold">
-                          {TEAM_MEMBERS.find((t) => t.id === c.assignedTo)?.avatar ?? "?"}
-                        </div>
-                        <span className="text-xs">{getAssigneeName(c.assignedTo)}</span>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-slate-400">Unassigned</span>
-                    )}
+                  <td className="text-xs font-semibold">
+                    {c.recommendation === "refund" ? `Refund ${formatPence(c.proposedAmountPence)}`
+                      : c.recommendation === "investigate" ? "Investigate" : <span className="text-slate-400">Pending</span>}
                   </td>
                   <td>
                     <Link href={`/retailer/cases/${c.id}`} className="button button-sm">

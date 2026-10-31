@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CustomerNav from "../components/CustomerNav";
 import { StatusBadge } from "../components/Badges";
+import { ApiError, getCustomerCase, formatPence } from "../lib/api";
 import {
-  loadComplaints,
   Complaint,
   ComplaintStatus,
   formatStatus,
@@ -18,22 +18,20 @@ import {
 // ─── Status timeline config ───────────────────────────────────────────────────
 const TIMELINE_STEPS: { key: ComplaintStatus; label: string; desc: string }[] = [
   { key: "submitted", label: "Submitted", desc: "Your complaint has been received." },
-  { key: "under_review", label: "Under Review", desc: "A team member is reviewing your case." },
-  { key: "investigating", label: "Investigation", desc: "The team is actively investigating your complaint." },
-  { key: "pending_approval", label: "Decision Made", desc: "A decision has been prepared and is pending approval." },
+  { key: "investigating", label: "Investigation", desc: "We are checking your complaint against your order records." },
+  { key: "pending_approval", label: "Team Review", desc: "Our team is reviewing the findings. No outcome has been authorised yet." },
   { key: "resolved", label: "Resolved", desc: "Your case has been resolved." },
 ];
 
 const STATUS_ORDER: ComplaintStatus[] = [
   "submitted",
-  "under_review",
   "investigating",
   "pending_approval",
   "resolved",
 ];
 
 function getStepIndex(status: ComplaintStatus): number {
-  if (status === "rejected" || status === "escalated") return 4;
+  if (status === "rejected" || status === "escalated") return 3;
   const idx = STATUS_ORDER.indexOf(status);
   return idx >= 0 ? idx : 0;
 }
@@ -47,6 +45,7 @@ function TrackContent() {
   const [complaint, setComplaint] = useState<Complaint | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   // Auto-search if params pre-filled (coming from confirmation page)
   useEffect(() => {
@@ -70,25 +69,36 @@ function TrackContent() {
     setSearching(true);
     setComplaint(null);
     setNotFound(false);
-
-    await new Promise((r) => setTimeout(r, 600)); // simulate search
-
-    const all = loadComplaints();
-    const found = all.find(
-      (c) => c.id.toUpperCase() === ref && c.customerEmail.toLowerCase() === email
-    );
-
-    if (found) {
-      setComplaint(found);
-    } else {
-      setNotFound(true);
+    setLoadError("");
+    try {
+      setComplaint(await getCustomerCase(ref, email));
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) setNotFound(true);
+      else setLoadError(err instanceof Error ? err.message : "Could not load your case. Please try again.");
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   }
+
+  // Background refresh that keeps the current view on failure (used by polling)
+  const refreshQuietly = useCallback(async () => {
+    if (!complaint) return;
+    try { setComplaint(await getCustomerCase(complaint.id, complaint.customerEmail)); } catch { /* keep last state */ }
+  }, [complaint]);
 
   function handleRefresh() {
-    if (complaint) handleSearch(complaint.id, complaint.customerEmail);
+    refreshQuietly();
   }
+
+  // Poll every 3s while the case is still moving; stop on a final state or while the tab is hidden
+  const active = complaint && ["submitted", "investigating", "pending_approval"].includes(complaint.status);
+  useEffect(() => {
+    if (!active) return;
+    const timer = setInterval(() => { if (!document.hidden) refreshQuietly(); }, 3000);
+    const onVisible = () => { if (!document.hidden) refreshQuietly(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [active, refreshQuietly]);
 
   const stepIdx = complaint ? getStepIndex(complaint.status) : -1;
   const isFinal = complaint && (complaint.status === "resolved" || complaint.status === "rejected" || complaint.status === "escalated");
@@ -110,7 +120,7 @@ function TrackContent() {
               <label className="label" htmlFor="ref">Complaint reference number <span className="text-red-500">*</span></label>
               <input id="ref" className={`input ${errors.ref ? "input-error" : ""}`}
                 value={refInput} onChange={(e) => setRefInput(e.target.value)}
-                placeholder="e.g. RP-2024-001"
+                placeholder="e.g. RP-0001"
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()} />
               {errors.ref && <p className="error-msg">{errors.ref}</p>}
             </div>
@@ -128,7 +138,7 @@ function TrackContent() {
           <div className="mt-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3">
             <p className="text-xs font-semibold text-blue-800 mb-1">Demo tip</p>
             <p className="text-xs text-blue-700">
-              Try: Reference <strong>RP-2024-001</strong> with email <strong>emma.thompson@email.com</strong>
+              Submit a complaint first, then use the reference (e.g. <strong>RP-0001</strong>) and the email you entered.
             </p>
           </div>
 
@@ -151,6 +161,8 @@ function TrackContent() {
             </p>
           </div>
         )}
+
+        {loadError && <div className="alert-error mb-8" role="alert">{loadError}</div>}
 
         {/* ── Complaint details ────────────────────────────────────────── */}
         {complaint && (
@@ -181,7 +193,7 @@ function TrackContent() {
                   { label: "Issue type", value: formatIssueType(complaint.issueType) },
                   { label: "Preferred resolution", value: formatResolution(complaint.preferredResolution) },
                   { label: "Order number", value: complaint.orderNumber },
-                  { label: "Purchase date", value: formatDate(complaint.purchaseDate) },
+                  { label: "Submitted", value: formatDate(complaint.submittedAt) },
                 ].map(({ label, value }) => (
                   <div key={label} className="border-b border-slate-100 pb-3">
                     <dt className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</dt>
@@ -198,7 +210,8 @@ function TrackContent() {
 
             {/* Status timeline */}
             <div className="card">
-              <h2 className="section-title mb-6">Status timeline</h2>
+              <h2 className="section-title mb-2">Status timeline</h2>
+              <p className="text-xs text-slate-500 mb-6">{active ? "This page updates automatically." : complaint.retailerResponse}</p>
 
               {/* Final states */}
               {complaint.status === "rejected" && (
@@ -221,7 +234,7 @@ function TrackContent() {
                   </svg>
                   <div>
                     <p className="font-semibold">Case Escalated</p>
-                    <p className="text-xs mt-1">Your case has been escalated to a senior team for further review.</p>
+                    <p className="text-xs mt-1">Our team needs to investigate further. We will update this page.</p>
                   </div>
                 </div>
               )}
@@ -231,9 +244,11 @@ function TrackContent() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div>
-                    <p className="font-semibold">Case Resolved</p>
-                    {complaint.retailerResponse && (
-                      <p className="text-xs mt-1 text-green-700">{complaint.retailerResponse}</p>
+                    <p className="font-semibold">Demo resolution completed</p>
+                    {complaint.resolutionRef && (
+                      <p className="text-xs mt-1 text-green-700">
+                        Simulated refund of {formatPence(complaint.resolutionAmountPence)} (reference {complaint.resolutionRef}). No real money has moved.
+                      </p>
                     )}
                   </div>
                 </div>
@@ -304,13 +319,6 @@ function TrackContent() {
               </div>
             )}
 
-            {/* Retailer response */}
-            {complaint.retailerResponse && (
-              <div className="card border-teal/20 bg-pale">
-                <h2 className="section-title mb-3">Retailer response</h2>
-                <p className="text-sm text-slate-700 leading-relaxed">{complaint.retailerResponse}</p>
-              </div>
-            )}
           </div>
         )}
       </div>

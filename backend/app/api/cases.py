@@ -4,6 +4,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from backend.app import config, policy
 from backend.app.db import connection, log_event, now, row_dict
 
 router = APIRouter()
@@ -32,6 +33,7 @@ PUBLIC_EVENTS = {
 
 class CaseDetails(BaseModel):
     """Customer-supplied context. Stored as given; never used for policy or amounts."""
+    retailer_name: Optional[str] = Field(None, max_length=200)
     customer_name: Optional[str] = Field(None, max_length=200)
     customer_email: Optional[str] = Field(None, max_length=200)
     customer_phone: Optional[str] = Field(None, max_length=50)
@@ -50,16 +52,23 @@ class CreateCase(BaseModel):
     description: str = Field(min_length=10, max_length=2000)
     details: CaseDetails = Field(default_factory=CaseDetails)
 
-    @field_validator("order_id", "description", mode="before")
+    @field_validator("order_id", mode="before")
     @classmethod
-    def strip(cls, v):
-        return v.strip().upper() if isinstance(v, str) and len(v) <= 40 else (v.strip() if isinstance(v, str) else v)
+    def normalise_order_id(cls, v):
+        return v.strip().upper() if isinstance(v, str) else v
+
+    @field_validator("description", mode="before")
+    @classmethod
+    def strip_description(cls, v):
+        return v.strip() if isinstance(v, str) else v
 
 
 class Decision(BaseModel):
     decision: Literal["approve", "reject", "escalate"]
     note: str = Field(min_length=10, max_length=500)
     customer_message: Optional[str] = Field(None, max_length=1000)
+    # Damage evidence is customer-supplied and unverified; a human must confirm it before a refund
+    evidence_confirmed: bool = False
 
 
 def _load_case(db, case_id):
@@ -75,6 +84,12 @@ def _staff_view(db, case):
     case["order"] = row_dict(db.execute("SELECT * FROM orders WHERE id=?", (case["order_id"],)).fetchone())
     case["resolution"] = row_dict(db.execute("SELECT * FROM resolutions WHERE case_id=?", (case["id"],)).fetchone())
     return case
+
+
+@router.get("/api/policy")
+def get_policy():
+    return {"version": policy.POLICY_VERSION, "return_window_days": policy.RETURN_WINDOW_DAYS,
+            "demo_today": config.DEMO_TODAY, "rules": policy.RULES}
 
 
 @router.get("/api/orders")
@@ -139,6 +154,7 @@ def get_customer_case(case_id: str, email: Optional[str] = None):
             "message": case["customer_message"] or CUSTOMER_MESSAGES.get(case["status"], ""),
             "created_at": case["created_at"], "updated_at": case["updated_at"],
             "title": details.get("title"), "product_name": details.get("product_name"),
+            "retailer_name": details.get("retailer_name"),
             "requested_resolution": details.get("requested_resolution"),
             "public_events": [{"id": e["id"], "at": e["at"], "actor": e["actor"], "message": PUBLIC_EVENTS[e["type"]]}
                               for e in events if e["type"] in PUBLIC_EVENTS],
@@ -152,6 +168,8 @@ def decide(case_id: str, body: Decision):
         case = _load_case(db, case_id)
         if body.decision == "approve" and (case["recommendation"] != "refund" or not case["proposed_amount_pence"]):
             raise HTTPException(409, "No refund proposal to approve; escalate or reject instead")
+        if body.decision == "approve" and case["issue_type"] == "damaged_item" and not body.evidence_confirmed:
+            raise HTTPException(422, "Confirm you have reviewed the damage evidence before approving")
         new_status = {"approve": "resolved", "reject": "rejected", "escalate": "escalated"}[body.decision]
         # atomic guard: only one request can move the case out of awaiting_review
         cur = db.execute("UPDATE cases SET status=?, decision_note=?, customer_message=?, updated_at=? "

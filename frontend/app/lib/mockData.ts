@@ -63,6 +63,14 @@ export interface Complaint {
   retailerResponse?: string;
   // Evidence (simulated filenames)
   evidenceFiles: string[];
+  // Backend investigation and resolution (present when loaded from the API)
+  recommendation?: "refund" | "investigate" | null;
+  proposedAmountPence?: number | null;
+  orderAmountPence?: number | null;
+  investigationSummary?: string | null;
+  policyReason?: string | null;
+  resolutionRef?: string | null;
+  resolutionAmountPence?: number | null;
 }
 
 export interface InternalComment {
